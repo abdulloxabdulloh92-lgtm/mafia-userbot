@@ -16,86 +16,64 @@ MAFIA_BOT = "MafiaBakuBlack1Bot"
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 
-# =============================================
-# 1. RO'YXATGA AVTOMATIK QO'SHILISH
-# =============================================
+async def click_button(event, label_hint=""):
+    if not event.buttons:
+        print(f"[-] {label_hint} — tugma yo'q")
+        return False
+
+    for row in event.buttons:
+        for btn in row:
+            # 1. URL button
+            if getattr(btn, "url", None):
+                try:
+                    parsed = urlparse(btn.url)
+                    params = parse_qs(parsed.query)
+                    if "start" in params:
+                        start_param = params["start"][0]
+                        await asyncio.sleep(0)
+                        await client.send_message(MAFIA_BOT, f"/start {start_param}")
+                        print(f"[✅] {label_hint} — olindi! Param: {start_param}")
+                        return True
+                    else:
+                        path = parsed.path.strip("/")
+                        if path:
+                            await asyncio.sleep(0)
+                            await client.send_message(path, "/start")
+                            print(f"[✅] {label_hint} — /start yuborildi: {path}")
+                            return True
+                except Exception as e:
+                    print(f"[❌] {label_hint} URL xatolik: {e}")
+
+            # 2. Callback button
+            if getattr(btn, "data", None):
+                try:
+                    await asyncio.sleep(0)
+                    await client(GetBotCallbackAnswerRequest(
+                        peer=TARGET_GROUP,
+                        msg_id=event.id,
+                        data=btn.data
+                    ))
+                    print(f"[✅] {label_hint} — olindi!")
+                    return True
+                except Exception as e:
+                    print(f"[❌] {label_hint} callback xatolik: {e}")
+
+    return False
+
+
 @client.on(events.NewMessage(chats=TARGET_GROUP))
 async def handler(event):
     text = event.raw_text
 
-    # --- RO'YXAT ---
     if "yxatdan o'tish" in text:
-        print(f"[+] Ro'yxat xabari topildi!")
+        print(f"[+] Ro'yxat boshlandi!")
+        await click_button(event, "Ro'yxat")
+        return
 
-        if event.buttons:
-            for row in event.buttons:
-                for btn in row:
-                    if hasattr(btn, "url") and btn.url:
-                        print(f"[+] Tugma URL: {btn.url}")
-                        try:
-                            parsed = urlparse(btn.url)
-                            params = parse_qs(parsed.query)
-                            if "start" in params:
-                                start_param = params["start"][0]
-                                await asyncio.sleep(0.3)
-                                await client.send_message(MAFIA_BOT, f"/start {start_param}")
-                                print(f"[✅] Ro'yxatdan o'tildi! Param: {start_param}")
-                                return
-                        except Exception as e:
-                            print(f"[❌] Ro'yxat xatolik: {e}")
-
-        # Matndan qidirish (zaxira)
-        if "t.me/" in text:
-            for word in text.split():
-                if "t.me/" in word and "start=" in word:
-                    try:
-                        parsed = urlparse(word)
-                        params = parse_qs(parsed.query)
-                        if "start" in params:
-                            start_param = params["start"][0]
-                            await asyncio.sleep(0.3)
-                            await client.send_message(MAFIA_BOT, f"/start {start_param}")
-                            print(f"[✅] Matndan o'tildi! Param: {start_param}")
-                            return
-                    except:
-                        pass
-
-    # --- OLMOS ---
     if "💎" in text or "olmos" in text.lower():
-        print(f"[💎] Olmos xabari topildi!")
-
-        if event.buttons:
-            for row in event.buttons:
-                for btn in row:
-                    # Callback button (inline) — "Bosing" tugmasi
-                    if hasattr(btn, "data") and btn.data:
-                        try:
-                            await asyncio.sleep(0.2)
-                            await client(GetBotCallbackAnswerRequest(
-                                peer=TARGET_GROUP,
-                                msg_id=event.id,
-                                data=btn.data
-                            ))
-                            print(f"[✅] Olmos olindi! (callback)")
-                            return
-                        except Exception as e:
-                            print(f"[❌] Callback xatolik: {e}")
-
-                    # URL button bo'lsa
-                    if hasattr(btn, "url") and btn.url:
-                        try:
-                            parsed = urlparse(btn.url)
-                            params = parse_qs(parsed.query)
-                            if "start" in params:
-                                start_param = params["start"][0]
-                                await asyncio.sleep(0.2)
-                                await client.send_message(MAFIA_BOT, f"/start {start_param}")
-                                print(f"[✅] Olmos olindi! (url)")
-                                return
-                        except Exception as e:
-                            print(f"[❌] URL xatolik: {e}")
-        else:
-            print("[-] Olmos xabarida tugma topilmadi")
+        print(f"[💎] Olmos keldi!")
+        await click_button(event, "Olmos")
+        return
 
 
 async def main():
