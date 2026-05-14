@@ -24,11 +24,17 @@ async def handler(event):
 
     print(f"[💎] Olmos keldi!")
 
-    if not event.buttons:
-        print("[-] Tugma yo'q")
-        return
+    # Tugmalarni olish — avval event dan, bo'lmasa qayta yuklab
+    if event.buttons:
+        rows = event.buttons
+    else:
+        msg = await client.get_messages(TARGET_GROUP, ids=event.id)
+        if not msg or not msg.buttons:
+            print("[-] Tugma yo'q")
+            return
+        rows = msg.buttons
 
-    for row in event.buttons:
+    for row in rows:
         for btn in row:
             if getattr(btn, "data", None):
                 try:
