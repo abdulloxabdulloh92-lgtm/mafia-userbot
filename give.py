@@ -1,30 +1,80 @@
+import os
 import asyncio
-from telethon import TelegramClient
+from telethon import TelegramClient, events
 from telethon.sessions import StringSession
+from urllib.parse import urlparse, parse_qs
 
-# ═══════════════════════════════════════
-# MA'LUMOTLAR
-# ═══════════════════════════════════════
-API_ID = 39185077
-API_HASH = "a4d31bf9e715bd4967bedaec282efa2e"
-SESSION_STRING = "1ApWapzMBu4FzMz-ZGkY-fABdWXMVfP93n_hewqpQ5NJ0L1pps8RW6MzIgLx5Jj67KkSm80HBk1khVBDVThzGExlnHpRO-kDt2DDv_Dm0VM0bM4glh055Lg7cG28rSCV73CxXcu6KXurG-j8upxj41O99HE7MkwTuCFum8pKxviIUxj9ck0iFQvv56sJgDiiafMtRD_bB2DdoB-YFsLBpzo1IUUMUAHpXCwIbUKo8T7hPb3OtYY1H1A53B9fpkYQs8lSVDANT81UBPUUN8htlgJLYPqTzcQIoQ7Z7fzc_KZSDL8MUKFArwv0Idd_rjtPccOx7CoYS_Y7ijtxBlBuGMGcdynIDLyc="
-TARGET_GROUP = -1003640042053  # guruh ID
-# ═══════════════════════════════════════
+# === ENVIRONMENT VARIABLES ===
+API_ID = int(os.environ.get("API_ID"))
+API_HASH = os.environ.get("API_HASH")
+SESSION_STRING = os.environ.get("SESSION_STRING")
+TARGET_GROUP = int(os.environ.get("TARGET_GROUP"))
+MAFIA_BOT = "MafiaBakuBlack1Bot"
+# ==============================
 
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+
+async def click_button(event, label_hint=""):
+    # Xabarda tugmalar borligini tekshirish
+    if not event.reply_markup or not event.buttons:
+        print(f"[-] {label_hint} — tugma yo'q")
+        return False
+
+    for row in event.buttons:
+        for btn in row:
+            # 1. URL tugmalarni tekshirish va qayta ishlash
+            if getattr(btn, "url", None):
+                try:
+                    parsed = urlparse(btn.url)
+                    params = parse_qs(parsed.query)
+                    
+                    if "start" in params:
+                        start_param = params["start"][0]
+                        await client.send_message(MAFIA_BOT, f"/start {start_param}")
+                        print(f"[✅] {label_hint} — olindi! Param: {start_param}")
+                        return True
+                    else:
+                        path = parsed.path.strip("/")
+                        if path and not path.isdigit():
+                            await client.send_message(path, "/start")
+                            print(f"[✅] {label_hint} — /start yuborildi: {path}")
+                            return True
+                except Exception as e:
+                    print(f"[❌] {label_hint} URL xatolik: {e}")
+            
+            # 2. Callback (Inline) tugmalarni bosish
+            elif getattr(btn, "data", None):
+                try:
+                    # Telethon-ning ichki .click() metodi xavfsizroq va osonroq ishlaydi
+                    await btn.click()
+                    print(f"[✅] {label_hint} — olindi!")
+                    return True
+                except Exception as e:
+                    print(f"[❌] {label_hint} callback xatolik: {e}")
+                    
+    return False
+
+@client.on(events.NewMessage(chats=TARGET_GROUP))
+async def handler(event):
+    text = event.raw_text or ""
+    
+    if "yxatdan o'tish" in text:
+        print(f"[+] Ro'yxat boshlandi!")
+        await click_button(event, "Ro'yxat")
+        return
+        
+    if "💎" in text or "olmos" in text.lower():
+        print(f"[💎] Olmos keldi!")
+        await click_button(event, "Olmos")
+        return
 
 async def main():
     await client.start()
     me = await client.get_me()
-    print(f"[✅] Kirdi: {me.first_name}")
-    print(f"[*] Har 4 sekundda /giveaway yuborilmoqda...")
+    print(f"[✅] Kirdi: {me.first_name} (@{me.username})")
+    print(f"[*] Guruh kuzatilmoqda: {TARGET_GROUP}")
+    print(f"[*] Ro'yxat va olmos kuzatilmoqda...")
+    await client.run_until_disconnected()
 
-    while True:
-        try:
-            await client.send_message(TARGET_GROUP, "/giveaway")
-            print(f"[📨] /giveaway yuborildi")
-        except Exception as e:
-            print(f"[❌] Xatolik: {e}")
-        await asyncio.sleep(4)
-
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
