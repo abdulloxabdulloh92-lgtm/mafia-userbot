@@ -15,14 +15,13 @@ MAFIA_BOT = "MafiaBakuBlack1Bot"
 client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
 async def click_button(event, label_hint=""):
-    # Xabarda tugmalar borligini tekshirish
     if not event.reply_markup or not event.buttons:
         print(f"[-] {label_hint} — tugma yo'q")
         return False
 
     for row in event.buttons:
         for btn in row:
-            # 1. URL tugmalarni tekshirish va qayta ishlash
+            # 1. URL tugmalarni tekshirish (Agar olmos start-havola orqali berilsa)
             if getattr(btn, "url", None):
                 try:
                     parsed = urlparse(btn.url)
@@ -42,10 +41,9 @@ async def click_button(event, label_hint=""):
                 except Exception as e:
                     print(f"[❌] {label_hint} URL xatolik: {e}")
             
-            # 2. Callback (Inline) tugmalarni bosish
+            # 2. Callback (Inline) tugmalarni bosish (Agar olmos oddiy tugma bo'lsa)
             elif getattr(btn, "data", None):
                 try:
-                    # Telethon-ning ichki .click() metodi xavfsizroq va osonroq ishlaydi
                     await btn.click()
                     print(f"[✅] {label_hint} — olindi!")
                     return True
@@ -58,13 +56,11 @@ async def click_button(event, label_hint=""):
 async def handler(event):
     text = event.raw_text or ""
     
-    if "yxatdan o'tish" in text:
-        print(f"[+] Ro'yxat boshlandi!")
-        await click_button(event, "Ro'yxat")
-        return
-        
+    # ❌ Ro'yxatdan o'tish (O'yinga qo'shilish) qismi olib tashlandi.
+    
+    # 💎 Faqat olmos kelganda ishlaydi
     if "💎" in text or "olmos" in text.lower():
-        print(f"[💎] Olmos keldi!")
+        print(f"[💎] Olmos xabari aniqlandi! Tugma bosilmoqda...")
         await click_button(event, "Olmos")
         return
 
@@ -73,7 +69,7 @@ async def main():
     me = await client.get_me()
     print(f"[✅] Kirdi: {me.first_name} (@{me.username})")
     print(f"[*] Guruh kuzatilmoqda: {TARGET_GROUP}")
-    print(f"[*] Ro'yxat va olmos kuzatilmoqda...")
+    print(f"[*] FAQAT OLMOS KUZATILMOQDA (O'yinga qo'shilmaydi)...")
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
