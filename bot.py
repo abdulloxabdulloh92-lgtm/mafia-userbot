@@ -1,128 +1,192 @@
-import asyncio
-import logging
 import os
-import re
-import math
-import hashlib
-import aiohttp
-from collections import Counter
-from dotenv import load_dotenv
-
-from aiogram import Bot, Dispatcher, Router
+import asyncio
+from telethon import TelegramClient, events
+from telethon.sessions import StringSession
+from telethon.tl.functions.messages import GetBotCallbackAnswerRequest
+from urllib.parse import urlparse, parse_qs
+from aiogram import Bot, Dispatcher
 from aiogram.types import Message
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import Command
 
-# ================== CONFIG ==================
-load_dotenv()
+# ═══════════════════════════════════════
+# MA'LUMOTLAR
+# ═══════════════════════════════════════
+API_ID = int(os.environ.get("API_ID"))
+API_HASH = os.environ.get("API_HASH")
+SESSION_STRING = os.environ.get("SESSION_STRING")
+TARGET_GROUP = int(os.environ.get("TARGET_GROUP"))
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+ADMIN_ID = int(os.environ.get("ADMIN_ID"))
+MAFIA_BOT = "MafiaBakuBlack1Bot"
+# ═══════════════════════════════════════
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-VT_API_KEY = os.getenv("VT_API_KEY")
+# Holat
+olmos_active = True
+royxat_active = True
+userbot_active = True
 
-# ================== LOG ==================
-logging.basicConfig(level=logging.INFO)
-
-# ================== BOT ==================
+client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-router = Router()
-dp.include_router(router)
 
-# ================== ANALYZER ==================
-def entropy(data):
-    if not data:
-        return 0
-    c = Counter(data)
-    n = len(data)
-    return -sum((x/n)*math.log2(x/n) for x in c.values())
 
-def analyze(data):
-    score = 0
-    e = entropy(data)
+async def click_button(event, label_hint=""):
+    if not event.buttons:
+        return False
+    for row in event.buttons:
+        for btn in row:
+            if getattr(btn, "url", None):
+                try:
+                    parsed = urlparse(btn.url)
+                    params = parse_qs(parsed.query)
+                    if "start" in params:
+                        start_param = params["start"][0]
+                        await client.send_message(MAFIA_BOT, f"/start {start_param}")
+                        print(f"[✅] {label_hint} — olindi! Param: {start_param}")
+                        return True
+                    else:
+                        path = parsed.path.strip("/")
+                        if path:
+                            await client.send_message(path, "/start")
+                            print(f"[✅] {label_hint} — /start yuborildi: {path}")
+                            return True
+                except Exception as e:
+                    print(f"[❌] {label_hint} URL xato: {e}")
 
-    if e > 7:
-        score += 50
-    elif e > 6:
-        score += 20
+            if getattr(btn, "data", None):
+                try:
+                    await client(GetBotCallbackAnswerRequest(
+                        peer=TARGET_GROUP,
+                        msg_id=event.id,
+                        data=btn.data
+                    ))
+                    print(f"[✅] {label_hint} — olindi!")
+                    return True
+                except Exception as e:
+                    print(f"[❌] {label_hint} callback xato: {e}")
+    return False
 
-    if b"powershell" in data.lower():
-        score += 30
 
-    if b"http" in data.lower():
-        score += 10
+@client.on(events.NewMessage(chats=TARGET_GROUP))
+async def handler(event):
+    global userbot_active, olmos_active, royxat_active
 
-    if score > 70:
-        verdict = "⛔ ZARARLI"
-    elif score > 30:
-        verdict = "⚠️ SHUBHALI"
-    else:
-        verdict = "✅ XAVFSIZ"
+    if not userbot_active:
+        return
 
-    return verdict, score, round(e, 2)
+    text = event.raw_text or ""
 
-# ================== VIRUSTOTAL ==================
-async def check_hash(hash_str):
-    if not VT_API_KEY:
-        return "VT o‘chirilgan"
+    if royxat_active and "yxatdan o'tish" in text:
+        print(f"[+] Ro'yxat boshlandi!")
+        await click_button(event, "Ro'yxat")
+        return
 
-    url = f"https://www.virustotal.com/api/v3/files/{hash_str}"
-    headers = {"x-apikey": VT_API_KEY}
+    if olmos_active and ("💎" in text or "olmos" in text.lower()):
+        print(f"[💎] Olmos keldi!")
+        await click_button(event, "Olmos")
+        return
 
-    async with aiohttp.ClientSession() as s:
-        async with s.get(url, headers=headers) as r:
-            if r.status != 200:
-                return "Topilmadi"
-            data = await r.json()
-            stats = data["data"]["attributes"]["last_analysis_stats"]
-            return f"🔴 {stats['malicious']} | 🟡 {stats['suspicious']}"
 
-# ================== COMMANDS ==================
-@router.message(CommandStart())
-async def start(msg: Message):
-    await msg.answer("🛡 MalwareGuard ishlayapti!\nFayl yubor yoki /hash yoz")
+# ═══════════════════════════════════════
+# ADMIN BOT BUYRUQLARI
+# ═══════════════════════════════════════
+def is_admin(user_id):
+    return user_id == ADMIN_ID
 
-@router.message(Command("hash"))
-async def hash_cmd(msg: Message):
-    parts = msg.text.split()
-    if len(parts) < 2:
-        return await msg.answer("Misol: /hash abc123")
 
-    h = parts[1]
-    res = await check_hash(h)
-    await msg.answer(f"Natija:\n{res}")
+@dp.message(Command("status"))
+async def cmd_status(message: Message):
+    if not is_admin(message.from_user.id): return
+    userbot_txt = "🟢 Ishlayapti" if userbot_active else "🔴 To'xtatilgan"
+    olmos_txt = "🟢 Yoqilgan" if olmos_active else "🔴 O'chirilgan"
+    royxat_txt = "🟢 Yoqilgan" if royxat_active else "🔴 O'chirilgan"
+    await message.answer(
+        f"📊 <b>Holat:</b>\n\n"
+        f"🤖 Userbot: {userbot_txt}\n"
+        f"💎 Olmos: {olmos_txt}\n"
+        f"📝 Ro'yxat: {royxat_txt}",
+        parse_mode="HTML"
+    )
 
-# ================== FILE ==================
-@router.message(lambda m: m.document)
-async def file_handler(msg: Message):
-    file = await bot.get_file(msg.document.file_id)
-    data = await bot.download_file(file.file_path)
 
-    content = data.read()
+@dp.message(Command("stop"))
+async def cmd_stop(message: Message):
+    global userbot_active
+    if not is_admin(message.from_user.id): return
+    userbot_active = False
+    await message.answer("🔴 Userbot to'xtatildi!")
 
-    verdict, score, ent = analyze(content)
-    sha256 = hashlib.sha256(content).hexdigest()
 
-    vt = await check_hash(sha256)
+@dp.message(Command("start_bot"))
+async def cmd_start_bot(message: Message):
+    global userbot_active
+    if not is_admin(message.from_user.id): return
+    userbot_active = True
+    await message.answer("🟢 Userbot ishga tushdi!")
 
-    text = f"""
-📄 {msg.document.file_name}
 
-{verdict}
-Ball: {score}/100
-Entropy: {ent}
+@dp.message(Command("olmos_on"))
+async def cmd_olmos_on(message: Message):
+    global olmos_active
+    if not is_admin(message.from_user.id): return
+    olmos_active = True
+    await message.answer("💎 Olmos yoqildi!")
 
-VT: {vt}
-SHA256:
-{sha256}
-"""
 
-    await msg.answer(text)
+@dp.message(Command("olmos_off"))
+async def cmd_olmos_off(message: Message):
+    global olmos_active
+    if not is_admin(message.from_user.id): return
+    olmos_active = False
+    await message.answer("💎 Olmos o'chirildi!")
 
-# ================== RUN ==================
+
+@dp.message(Command("royxat_on"))
+async def cmd_royxat_on(message: Message):
+    global royxat_active
+    if not is_admin(message.from_user.id): return
+    royxat_active = True
+    await message.answer("📝 Ro'yxat yoqildi!")
+
+
+@dp.message(Command("royxat_off"))
+async def cmd_royxat_off(message: Message):
+    global royxat_active
+    if not is_admin(message.from_user.id): return
+    royxat_active = False
+    await message.answer("📝 Ro'yxat o'chirildi!")
+
+
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+    if not is_admin(message.from_user.id): return
+    await message.answer(
+        "🤖 <b>Mafia Userbot Panel</b>\n\n"
+        "/status — holat\n"
+        "/stop — to'xtatish\n"
+        "/start_bot — ishga tushirish\n"
+        "/olmos_on — olmos yoqish\n"
+        "/olmos_off — olmos o'chirish\n"
+        "/royxat_on — ro'yxat yoqish\n"
+        "/royxat_off — ro'yxat o'chirish",
+        parse_mode="HTML"
+    )
+
+
+# ═══════════════════════════════════════
+# MAIN
+# ═══════════════════════════════════════
 async def main():
-    print("🚀 Bot ishga tushdi")
-    await dp.start_polling(bot)
+    await client.start()
+    me = await client.get_me()
+    print(f"[✅] Userbot kirdi: {me.first_name} (@{me.username})")
+    print(f"[✅] Admin bot ishga tushdi")
+    print(f"[*] Guruh kuzatilmoqda: {TARGET_GROUP}")
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    await asyncio.gather(
+        client.run_until_disconnected(),
+        dp.start_polling(bot)
+    )
 
 
+asyncio.run(main())
